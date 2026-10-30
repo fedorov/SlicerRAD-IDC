@@ -44,25 +44,62 @@ stays stable until someone deliberately takes an update.
 
 # index-free direct form (opens straight from the IDC S3 bucket)
 ?series=<crdc_series_uuid>&bucket=idc-open-data[&seg=<uuid>&segBucket=idc-open-data&modality=CT]
+
+# either UID form, plus segmentations from a Google Cloud Healthcare DICOM store
+&gcp=projects/<p>/locations/<l>/datasets/<d>/dicomStores/<s>
 ```
 
-StudyInstanceUID → S3 resolution uses a slim, radiology-only IDC index hosted with CORS on
-Jetstream2; only the ~1 row group spanning the study is range-read (~0.6 MB), never the whole index.
+StudyInstanceUID → S3 resolution asks the IDC API (`api.imaging.datacommons.cancer.gov/v3/sql`)
+for the study's series; the images themselves are read straight from IDC's public S3 bucket.
 
 Example (KiTS-00051):
 <https://pieper.github.io/SlicerRAD-IDC/?StudyInstanceUIDs=1.3.6.1.4.1.14519.5.2.1.6919.4624.368281589441706814147998236429>
+
+## Segmentations from a Google Cloud DICOM store (`?gcp=`)
+
+For reviewing segmentations (from an AI model or annotators) that are kept in a private
+[Cloud Healthcare](https://cloud.google.com/healthcare-api/docs/how-tos/dicomweb) DICOM store
+rather than in IDC. The images still come from IDC; the store adds SEG series to the same study.
+`?gcp=` takes the same values as IDC's OHIF and Slim: the store path, the full
+`https://healthcare.googleapis.com/v1/projects/…/dicomStores/<s>[/dicomWeb]` URL, or OHIF's
+`…/dicomStores/<s>/study/<uid>[/series/<uid>]` form.
+
+- **Sign-in.** The page asks you to *Sign in with Google* (or *Continue without*, which opens the
+  IDC study as usual). The access token — scope `cloud-healthcare`, so what you can read is what
+  your IAM role on the store allows (`roles/healthcare.dicomViewer` is enough) — is kept in this
+  tab's session storage and sent only to `healthcare.googleapis.com`.
+- **Which segmentation opens.** A SEG named in `SeriesInstanceUIDs` (either source's), else the
+  store's first SEG (by series number, then date) that was drawn on an IDC image series, over that
+  series. Only BINARY SEGs decode; a multi-instance SEG shows its first instance.
+- **Series panel.** The store's SEGs come first, tagged **GCP** (hover for the store). Clicking one
+  drawn on the open series swaps the overlay in place; one drawn on another series opens that
+  series with it.
+- **Data sources** (cloud icon in the toolbar): change or remove the store — paste a path or URL,
+  or pick a recent one — and sign in or out.
+- **Share** links carry `gcp=` and the SEG; whoever opens one signs in with their own account.
+  **Download** is IDC's public series only.
+- **Testing without an OAuth client:** append `&token=$(gcloud auth print-access-token)`. The token
+  is taken off the address bar as soon as the page reads it and is good for about an hour.
+
+The OAuth client is a deployment setting: create a *Web application* client in Google Cloud
+Console (Google Auth Platform → Clients) with the site's origin under *Authorized JavaScript
+origins* (no redirect URI is needed — sign-in uses the Google Identity Services token popup), then
+set its client id as the repository variable `GOOGLE_OAUTH_CLIENT_ID`. Without it the sign-in
+button says sign-in isn't configured, and `&token=` still works.
 
 ## Build
 
 ```
 git submodule update --init --recursive
-deno task build          # → _site/  (bir.js + index.html)
+deno task build          # → _site/  (bir.js + index.html + config.js + workers)
+GOOGLE_OAUTH_CLIENT_ID=<id>.apps.googleusercontent.com deno task build   # with Google sign-in
 ```
 
 ## Deploy
 
 Pushing to `main` runs `.github/workflows/deploy.yml`: it checks out the pinned submodule, bundles
-the reader with Deno + esbuild, and publishes `_site/` to GitHub Pages.
+the reader with Deno + esbuild (passing the `GOOGLE_OAUTH_CLIENT_ID` repo variable to the build),
+and publishes `_site/` to GitHub Pages.
 
 ## Taking a SlicerLive update (selective)
 

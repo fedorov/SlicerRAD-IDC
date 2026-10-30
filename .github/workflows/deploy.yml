@@ -29,6 +29,10 @@ jobs:
           deno-version: v2.x
       - name: Build _site (bundle the pinned BIR reader + copy the page)
         run: deno run -A build.ts
+        env:
+          # OAuth client for "Sign in with Google" (?gcp= stores). A repo variable, not a secret:
+          # a web client id is public — it ships in config.js. Unset → sign-in is off.
+          GOOGLE_OAUTH_CLIENT_ID: ${{ vars.GOOGLE_OAUTH_CLIENT_ID }}
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v5
         with:

@@ -47,6 +47,9 @@ stays stable until someone deliberately takes an update.
 
 # either UID form, plus segmentations from a Google Cloud Healthcare DICOM store
 &gcp=projects/<p>/locations/<l>/datasets/<d>/dicomStores/<s>
+
+# ...or from a public DICOMweb store (no sign-in)
+&dicomweb=https://<DICOMweb root>
 ```
 
 StudyInstanceUID → S3 resolution asks the IDC API (`api.imaging.datacommons.cancer.gov/v3/sql`)
@@ -86,6 +89,30 @@ Console (Google Auth Platform → Clients) with the site's origin under *Authori
 origins* (no redirect URI is needed — sign-in uses the Google Identity Services token popup), then
 set its client id as the repository variable `GOOGLE_OAUTH_CLIENT_ID`. Without it the sign-in
 button says sign-in isn't configured, and `&token=` still works.
+
+## Segmentations from a public DICOMweb store (`?dicomweb=`)
+
+`?dicomweb=` works like `?gcp=`, for a store anyone may read: a public DICOMweb service. One
+example is a read-only proxy in front of a Cloud Healthcare store, such as
+[gcp-dicomweb-proxy](https://github.com/fedorov/gcp-dicomweb-proxy).
+
+No sign-in is involved, and it works without an OAuth client. The page never shows Google's
+consent screen or loads its sign-in script, and it sends no token or cookie to the store.
+
+- **The value** is the service's DICOMweb root: an `https://` URL, or `http://` for `localhost`
+  only. A `healthcare.googleapis.com` URL is refused, because it can't be read without signing in;
+  name such a store with `?gcp=` instead.
+- **Segmentations.** The store's SEGs are found, chosen and shown exactly as with `?gcp=`. In the
+  series panel they are tagged **WEB**.
+- **Both parameters.** If a link has both `?dicomweb=` and `?gcp=`, `?dicomweb=` is used.
+- **Data sources.** The dialog accepts such a URL as well as a Google store.
+- **Share** links carry `dicomweb=`, and whoever opens one needs no account.
+- **What the service must do:**
+  - allow CORS from the viewer's origin;
+  - answer an instance-level QIDO (`/studies/<uid>/instances?Modality=SEG`);
+  - return a whole instance as stored (`Accept: application/dicom; transfer-syntax=*`).
+
+  Frames and bulk data are never requested.
 
 ## Build
 
